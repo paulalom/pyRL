@@ -169,6 +169,15 @@ class ConfusedMonster:
             message('The ' + self.owner.name + ' is no longer confused!', libtcod.red)
 
 
+class DragonAI:
+    def __init__(self):
+        self.state = 'chasing'
+ 
+    def take_turn(self):
+        if self.state == 'chasing': ...
+        elif self.state == 'charging-fire-breath': ...
+
+
 #########################################################################
 ###                         Tile Class                                ###
 #########################################################################
@@ -308,6 +317,10 @@ class Object:
         dy = other.y - self.y
         return math.sqrt(dx ** 2 + dy ** 2)
 
+    def distance(self, x, y):
+        #return the distance to some coordinates
+        return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2)
+
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
         dx = target_x - self.x
@@ -324,16 +337,10 @@ class Object:
 ###                      Functions                                    ###
 #########################################################################
 
-def get_names_under_mouse():
-    global mouse
 
-    #return a string with the names of all objects under the mouse
-    (x, y) = (mouse.cx, mouse.cy)
-    #create a list with the names of all objects at the mouse's coordinates and in FOV
-    names = [obj.name for obj in objects
-       if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
-    names = ', '.join(names)  #join the names, separated by commas
-    return names.capitalize()
+#################################
+####         Spells         #####
+#################################
 
 def cast_heal():
     #heal the player
@@ -342,6 +349,18 @@ def cast_heal():
         return
     else:
         return 'cancelled'
+
+def cast_fireball():
+    #ask the player for a target tile to throw a fireball at
+    message('Left-click a target tile for the fireball, or right-click to cancel.', libtcod.light_cyan)
+    (x, y) = target_tile()
+    if x is None: return 'cancelled'
+    message('The fireball explodes, burning everything within ' + str(FIREBALL_RADIUS) + ' tiles!', libtcod.orange)
+ 
+    for obj in objects:  #damage every fighter in range, including the player
+        if obj.distance(x, y) <= FIREBALL_RADIUS and obj.fighter:
+            message('The ' + obj.name + ' gets burned for ' + str(FIREBALL_DAMAGE) + ' hit points.', libtcod.orange)
+            obj.fighter.take_damage(FIREBALL_DAMAGE)
 
 def cast_confuse():
     #find closest enemy in-range and confuse it
@@ -354,6 +373,22 @@ def cast_confuse():
     monster.ai = ConfusedMonster(old_ai)
     monster.ai.owner = monster  #tell the new component who owns it
     message('The eyes of the ' + monster.name + ' look vacant, as he starts to stumble around!', libtcod.light_green)
+
+
+#####################################################
+############         Misc            ################
+#####################################################
+
+def get_names_under_mouse():
+    global mouse
+
+    #return a string with the names of all objects under the mouse
+    (x, y) = (mouse.cx, mouse.cy)
+    #create a list with the names of all objects at the mouse's coordinates and in FOV
+    names = [obj.name for obj in objects
+       if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
+    names = ', '.join(names)  #join the names, separated by commas
+    return names.capitalize()
 
 def handle_keys():
     global fov, fov_recompute, objects, game_state, player_action, key
@@ -658,6 +693,27 @@ def is_blocked(x, y, m):
             return True
 
     return False
+
+def target_tile(max_range=None):
+    #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
+    global key, mouse
+    while True:
+        #render the screen. this erases the inventory and shows the names of objects under the mouse.
+        libtcod.console_flush()
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
+        render_all()
+ 
+        (x, y) = (mouse.cx, mouse.cy)
+ 
+        if mouse.lbutton_pressed:
+            return (x, y)
+        if mouse.rbutton_pressed or key.vk == libtcod.KEY_ESCAPE:
+            return (None, None)  #cancel if the player right-clicked or pressed Escape
+
+        #accept the target if the player clicked in FOV, and in case a range is specified, if it's in that range
+        if (mouse.lbutton_pressed and libtcod.map_is_in_fov(fov_map, x, y) and
+            (max_range is None or player.distance(x, y) <= max_range)):
+
 
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     #render a bar (HP, experience, etc). first calculate the width of the bar
