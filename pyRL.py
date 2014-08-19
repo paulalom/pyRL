@@ -34,6 +34,8 @@ LIGHTNING_DAMAGE = 20
 LIGHTNING_RANGE = 5
 CONFUSE_NUM_TURNS = 3
 CONFUSE_RANGE = 5
+FIREBALL_RADIUS = 3
+FIREBALL_DAMAGE = 12
 
 libtcod.console_set_custom_font('tiles18x18_gs_ro.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW, 16, 25 )
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
@@ -66,7 +68,7 @@ class Item:
             message('Your inventory is full, cannot pick up ' + self.owner.name + '.', libtcod.red)
         else:
             inventory.append(self.owner)
-            objects.remove(self.owner)
+            map.objects.remove(self.owner)
             message('You picked up a ' + self.owner.name + '!', libtcod.green)
 
     def use(self):
@@ -188,6 +190,7 @@ class Map:
         self.w = w
         self.h = h
         self.tiles = []
+        self.objects = [npc, player] 
 
     def generate_map(self):
 
@@ -343,7 +346,7 @@ def cast_fireball():
     if x is None: return 'cancelled'
     message('The fireball explodes, burning everything within ' + str(FIREBALL_RADIUS) + ' tiles!', libtcod.orange)
  
-    for obj in objects:  #damage every fighter in range, including the player
+    for obj in map.objects:  #damage every fighter in range, including the player
         if obj.distance(x, y) <= FIREBALL_RADIUS and obj.fighter:
             message('The ' + obj.name + ' gets burned for ' + str(FIREBALL_DAMAGE) + ' hit points.', libtcod.orange)
             obj.fighter.take_damage(FIREBALL_DAMAGE)
@@ -371,13 +374,13 @@ def get_names_under_mouse():
     #return a string with the names of all objects under the mouse
     (x, y) = (mouse.cx, mouse.cy)
     #create a list with the names of all objects at the mouse's coordinates and in FOV
-    names = [obj.name for obj in objects
+    names = [obj.name for obj in map.objects
        if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
     names = ', '.join(names)  #join the names, separated by commas
     return names.capitalize()
 
 def handle_keys():
-    global fov, fov_recompute, objects, game_state, player_action, key
+    global fov, fov_recompute, game_state, player_action, key
 
 #   key = libtcod.console_wait_for_keypress(True)
     #_console_check_for_keypress()
@@ -415,14 +418,14 @@ def handle_keys():
                     chosen_item.use()
             elif key_char == 'g':
                 #pick up an item
-                for object in objects:  #look for an item in the player's tile
+                for object in map.objects:  #look for an item in the player's tile
                     if object.x == player.x and object.y == player.y and object.item:
                         object.item.pick_up()
                         break
 
     if key.vk == libtcod.KEY_CHAR:
         if key.c == ord('m'):
-            objects = [npc, player]
+            map.objects = [npc, player]
             map.generate_map()
             fov_recompute = True
         elif key.c == ord('f'):
@@ -491,7 +494,7 @@ def player_move_or_attack(dx, dy):
 
     #try to find an attackable object there
     target = None
-    for object in objects:
+    for object in map.objects:
         if object.fighter and object.x == x and object.y == y:
             target = object
             break
@@ -545,10 +548,10 @@ def render_all():
                     libtcod.console_put_char_ex(con, x, y, '#', color_light_wall, BACK_COLOR)
                 else:
                     libtcod.console_put_char_ex(con, x, y, '.', color_light_ground, BACK_COLOR)
-    for object in objects:
+    for object in map.objects:
         if not object.fighter:
             object.draw(fov_map, fov)
-    for object in objects: #combat objects on top
+    for object in map.objects: #combat objects on top
         if object.fighter: # (they cant occupy the same square)
             object.draw(fov_map, fov)
     libtcod.console_blit(con,0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
@@ -610,7 +613,7 @@ def place_objects(room):
                 ai_component = BasicMonster()
                 monster = Object(x, y, 'T', 'troll', libtcod.darker_green, blocks=True, fighter=fighter_component,ai=ai_component)
 
-            objects.append(monster)
+            map.objects.append(monster)
 
         #choose random number of items
     num_items = libtcod.random_get_int(0, 0, MAX_ROOM_ITEMS)
@@ -623,19 +626,23 @@ def place_objects(room):
         #only place it if the tile is not blocked
         if not is_blocked(x, y, map):
             dice = libtcod.random_get_int(0, 0, 100)
-            if dice < 70:
+            if dice < 50:
                 #create a healing potion
                 item_component = Item(use_function=cast_heal)
                 item = Object(x, y, '!', 'healing potion', libtcod.violet, item=item_component)
-            elif dice < 70+15:
-                #create a lightning bolt scroll (15% chance)
+            elif dice < 50+20:
+                #create a lightning bolt scroll (20% chance)
                 item_component = Item(use_function=cast_lightning)
                 item = Object(x, y, '?', 'scroll of lightning bolt', libtcod.light_yellow, item=item_component)
+            elif dice < 50+20+15:
+                #create a fireball scroll (15% chance)
+                item_component = Item(use_function=cast_fireball)
+                item = Object(x, y, '#', 'scroll of fireball', libtcod.light_yellow, item=item_component)
             else:
                 #create a confuse scroll (15% chance)
                 item_component = Item(use_function=cast_confuse)
                 item = Object(x, y, '?', 'scroll of confusion', libtcod.light_yellow, item=item_component)
-            objects.append(item)
+            map.objects.append(item)
 
 def cast_lightning():
     #find closest enemy (inside a maximum range) and damage it
@@ -655,7 +662,7 @@ def closest_monster(max_range):
     closest_enemy = None
     closest_dist = max_range + 1  #start with (slightly more than) maximum range
 
-    for object in objects:
+    for object in map.objects:
         if object.fighter and not object == player and libtcod.map_is_in_fov(fov_map, object.x, object.y):
                 #calculate distance between this object and the player
             dist = player.distance_to(object)
@@ -674,7 +681,7 @@ def is_blocked(x, y, m):
         return True
 
     #now check for any blocking objects
-    for object in objects:
+    for object in map.objects:
         if object.blocks and object.x == x and object.y == y:
             return True
 
@@ -761,7 +768,6 @@ player = Object(0,0, '@', 'player', libtcod.white, blocks=True, fighter=player_f
 npc_fighter_component = Fighter(hp=30, defense=2, power=5, death_function=monster_death)
 npc = Object(0, 0, '@', 'npc', libtcod.yellow, blocks=True, fighter=npc_fighter_component)
 fov = True
-objects = [npc, player]
 map = Map(MAP_WIDTH,MAP_HEIGHT)
 map.generate_map()
 fov_map = libtcod.map_new(map.w, map.h)
@@ -784,7 +790,7 @@ while not libtcod.console_is_window_closed():
 
     libtcod.console_flush()
 
-    for object in objects:
+    for object in map.objects:
         object.clear()
 
     player_action = handle_keys()
@@ -792,6 +798,6 @@ while not libtcod.console_is_window_closed():
         break
     #let monsters take their turn
     if game_state == 'playing' and player_action != 'didnt-take-turn':
-        for object in objects:
+        for object in map.objects:
             if object.ai:
                 object.ai.take_turn()
