@@ -2,6 +2,7 @@
 
 import libtcodpy as libtcod
 import math
+import paths
 import time
 import textwrap
 
