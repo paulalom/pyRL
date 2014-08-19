@@ -174,8 +174,10 @@ class DragonAI:
         self.state = 'chasing'
  
     def take_turn(self):
-        if self.state == 'chasing': ...
-        elif self.state == 'charging-fire-breath': ...
+        if self.state == 'chasing':
+            return
+        elif self.state == 'charging-fire-breath':
+            return
 
 
 #########################################################################
@@ -713,6 +715,7 @@ def target_tile(max_range=None):
         #accept the target if the player clicked in FOV, and in case a range is specified, if it's in that range
         if (mouse.lbutton_pressed and libtcod.map_is_in_fov(fov_map, x, y) and
             (max_range is None or player.distance(x, y) <= max_range)):
+            return #change me
 
 
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
