@@ -7,28 +7,26 @@ import paths
 import time
 import textwrap
 
-SCREEN_WIDTH = 80
-SCREEN_HEIGHT = 50
-LIMIT_FPS = 20
-ROOM_MAX_SIZE = 10
-ROOM_MIN_SIZE = 6
-MAX_ROOMS = 30
-MAP_WIDTH = 80
-MAP_HEIGHT = 43
-FOV_ALGO = 0  #default FOV algorithm
-FOV_LIGHT_WALLS = True
-TORCH_RADIUS = 10
-BACK_COLOR = libtcod.black
-MAX_ROOM_MONSTERS = 3
 #sizes and coordinates relevant for the GUI
-BAR_WIDTH = 20
-PANEL_HEIGHT = 7
+SCREEN_WIDTH = 60
+SCREEN_HEIGHT = 40
+BAR_WIDTH = SCREEN_WIDTH/5
+PANEL_HEIGHT = SCREEN_HEIGHT/4
 PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
 MSG_X = BAR_WIDTH + 2
 MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
 MSG_HEIGHT = PANEL_HEIGHT - 1
+MAP_WIDTH = SCREEN_WIDTH
+MAP_HEIGHT = SCREEN_HEIGHT - PANEL_HEIGHT
+INVENTORY_WIDTH = SCREEN_WIDTH/2
+
+ROOM_MAX_SIZE = 10
+ROOM_MIN_SIZE = 6
+MAX_ROOM_MONSTERS = 3
+MAX_ROOMS = 30
 MAX_ROOM_ITEMS = 2
-INVENTORY_WIDTH = 50
+
+TORCH_RADIUS = 10
 HEAL_AMOUNT = 4
 LIGHTNING_DAMAGE = 20
 LIGHTNING_RANGE = 5
@@ -37,20 +35,33 @@ CONFUSE_RANGE = 5
 FIREBALL_RADIUS = 3
 FIREBALL_DAMAGE = 12
 
+FOV_ALGO = 0  #default FOV algorithm
+FOV_LIGHT_WALLS = True
+BACK_COLOR = libtcod.black
+LIMIT_FPS = 20
 libtcod.console_set_custom_font('tiles18x18_gs_ro.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW, 16, 25 )
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
+libtcod.console_set_keyboard_repeat(80,25)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 libtcod.sys_set_fps(LIMIT_FPS)
 
 color_dark_wall = libtcod.Color(50, 50, 50)
-color_light_wall = libtcod.white
+color_light_wall = libtcod.Color(255,255,255)
 color_dark_ground = libtcod.Color(50, 50, 50)
 color_light_ground = libtcod.white
 fov = True
-game_state = 'playing'
 player_action = None
 #create the list of game messages and their colors, starts empty
 game_msgs = []
+
+
+#########################################################################
+###                      Game State Class                             ###
+#########################################################################
+
+class Game_state:
+    def __init__():
+        print "under construction"
 
 #########################################################################
 ###                         Misc Classes                              ###
@@ -70,6 +81,14 @@ class Item:
             inventory.append(self.owner)
             map.objects.remove(self.owner)
             message('You picked up a ' + self.owner.name + '!', libtcod.green)
+
+    def drop(self):
+        #add to the map and remove from the player's inventory, also, place at player's coordinates
+        objects.append(self.owner)
+        inventory.remove(self.owner)
+        self.owner.x = player.x
+        self.owner.y = player.y
+        message('You dropped a ' + self.owner.name + '.', libtcod.yellow)
 
     def use(self):
         #just call the "use_function" if it is defined
@@ -352,11 +371,11 @@ def cast_fireball():
             obj.fighter.take_damage(FIREBALL_DAMAGE)
 
 def cast_confuse():
-    #find closest enemy in-range and confuse it
-    monster = closest_monster(CONFUSE_RANGE)
-    if monster is None:  #no enemy found within maximum range
-        message('No enemy is close enough to confuse.', libtcod.red)
-        return 'cancelled'
+    #ask the player for target to confuse
+    message('Left-click an enemy to confuse it, or right-click to cancel.', libtcod.light_cyan)
+    monster = target_monster(CONFUSE_RANGE)
+    if monster is None: return 'cancelled'
+   
     #replace the monster's AI with a "confused" one; after some turns it will restore the old AI
     old_ai = monster.ai
     monster.ai = ConfusedMonster(old_ai)
@@ -379,8 +398,8 @@ def get_names_under_mouse():
     names = ', '.join(names)  #join the names, separated by commas
     return names.capitalize()
 
-def handle_keys():
-    global fov, fov_recompute, game_state, player_action, key
+def handle_keys(game_state, key):
+    global fov, fov_recompute
 
 #   key = libtcod.console_wait_for_keypress(True)
     #_console_check_for_keypress()
@@ -391,18 +410,21 @@ def handle_keys():
     elif key.vk == libtcod.KEY_ESCAPE:
         return 'exit'  #exit game
 
-
-    if (libtcod.console_is_key_pressed(libtcod.KEY_UP)):
-        return player_move_or_attack(0, -1)
-    elif (libtcod.console_is_key_pressed(libtcod.KEY_DOWN)):
-        return player_move_or_attack(0, 1)
-    elif (libtcod.console_is_key_pressed(libtcod.KEY_LEFT)):
-        return player_move_or_attack(-1, 0)
-    elif (libtcod.console_is_key_pressed(libtcod.KEY_RIGHT)):
-        return player_move_or_attack(1, 0)
-
     if game_state == 'playing':
+
+        
+       # if (libtcod.console_is_key_pressed(libtcod.KEY_UP)):
+       #     return player_move_or_attack(0, -1)
+       # elif (libtcod.console_is_key_pressed(libtcod.KEY_DOWN)):
+       #     return player_move_or_attack(0, 1)
+       # elif (libtcod.console_is_key_pressed(libtcod.KEY_LEFT)):
+       #     return player_move_or_attack(-1, 0)
+       # elif (libtcod.console_is_key_pressed(libtcod.KEY_RIGHT)):
+       #     return player_move_or_attack(1, 0)
+
         if key.vk == libtcod.KEY_CHAR:
+            if key.c == libtcod.KEY_UP:
+                return player_move_or_attack(0, -1)
             key_char = chr(key.c)
             if key_char == 'w':
                 return player_move_or_attack(0, -1)
@@ -422,6 +444,11 @@ def handle_keys():
                     if object.x == player.x and object.y == player.y and object.item:
                         object.item.pick_up()
                         break
+            elif key_char == 'd':
+               #show the inventory; if an item is selected, drop it.
+               chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
+               if chosen_item is not None:
+                  chosen_item.drop()
 
     if key.vk == libtcod.KEY_CHAR:
         if key.c == ord('m'):
@@ -687,6 +714,18 @@ def is_blocked(x, y, m):
 
     return False
 
+def target_monter(max_range=None):
+    #returns a clicked monster inside FOV up to a range, or None if right-clicked
+    while True:
+        (x, y) = target_tile(max_range)
+        if x is None:
+            return None
+       
+        #return the first clicked mosnter, otherwise loop
+        for obj in objects:
+            if obj.x == x and obj.y == y and obj.fighter and obj != player:
+                return obj
+
 def target_tile(max_range=None):
     #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
     global key, mouse
@@ -781,6 +820,7 @@ for y in range(map.h):
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 #welcome message
 message('Welcome! Don\'t lose your shoes because its a long walk through the DUNGEON OF HARD STONE FLOORS!', libtcod.red)
+game_state = 'playing'
 
 mouse = libtcod.Mouse()
 key = libtcod.Key()
@@ -793,7 +833,7 @@ while not libtcod.console_is_window_closed():
     for object in map.objects:
         object.clear()
 
-    player_action = handle_keys()
+    player_action = handle_keys(game_state, key)
     if player_action == 'exit':
         break
     #let monsters take their turn
